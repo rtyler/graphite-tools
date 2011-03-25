@@ -55,14 +55,24 @@ class StatsServer(SocketServer.UDPServer):
 
     def _generate_timings(self):
         for label, points in self._timing_data.iteritems():
+            lower = sys.maxint
+            upper = 0.0
             total = 0.0
             count = 0.0
             for delta, tstamp in points:
+                if delta < lower:
+                    lower = delta
+                if delta > upper:
+                    upper = delta
                 count += 1.0
                 total += delta
             now = int(time.time())
             average = (total / count)
-            yield '%(label)s %(average)s %(now)s' % locals()
+
+            yield '%(label)s.avg %(average)s %(now)s' % locals()
+            yield '%(label)s.lower %(lower)s %(now)s' % locals()
+            yield '%(label)s.upper %(upper)s %(now)s' % locals()
+            yield '%(label)s.count %(count)s %(now)s' % locals()
 
     def _clear_data(self):
         for d in (self._count_data, self._timing_data):
