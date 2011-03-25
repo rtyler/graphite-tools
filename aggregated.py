@@ -23,6 +23,7 @@
 
 """
 
+import optparse
 import sys
 
 import eventlet
@@ -34,10 +35,10 @@ from eventlet.green import SocketServer
 
 CARBON_SERVER = '127.0.0.1'
 CARBON_PORT = 2003
-
 AGGREGATE_TIMEOUT = 60
 
 class StatsServer(SocketServer.UDPServer):
+    debug = False
     def __init__(self, *args, **kwargs):
         self._stats_data = {}
         eventlet.spawn_after(AGGREGATE_TIMEOUT, self.aggregate_flush)
@@ -61,6 +62,9 @@ class StatsServer(SocketServer.UDPServer):
                 del self._stats_data[key]
 
             message = '\n'.join(events) + '\n'
+            if self.debug:
+                print 'writing:'
+                print repr(message)
             csock = socket.socket()
             csock.connect((CARBON_SERVER, CARBON_PORT,))
             try:
@@ -82,14 +86,29 @@ class StatsHandler(SocketServer.DatagramRequestHandler):
 
         label, value, tstamp = chunks[0], float(chunks[1]), float(chunks[2])
 
+        if self.server.debug:
+            print '<<handle>> %s %s %s' % (label, value, tstamp)
+
         stats = self.server._stats_data
         if not stats.has_key(label):
             stats[label] = []
         stats[label].append((value, tstamp))
 
+class DebugStatsServer(StatsServer):
+    debug = True
 
 def main():
-    server = StatsServer(('', 22034,), StatsHandler)
+    options = optparse.OptionParser()
+    options.add_option('-d', '--debug', action='store_true',
+                    dest='debug', help='Turn on aggregated debug statements')
+    opts, args = options.parse_args()
+    klass = StatsServer
+
+    if opts.debug:
+        klass = DebugStatsServer
+
+
+    server = klass(('', 22034,), StatsHandler)
     print '>> Starting server on port 22034'
     print
     server.serve_forever()
