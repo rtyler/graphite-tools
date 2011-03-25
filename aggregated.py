@@ -40,37 +40,59 @@ AGGREGATE_TIMEOUT = 60
 class StatsServer(SocketServer.UDPServer):
     debug = False
     def __init__(self, *args, **kwargs):
-        self._stats_data = {}
+        self._count_data = {}
+        self._timing_data = {}
         eventlet.spawn_after(AGGREGATE_TIMEOUT, self.aggregate_flush)
         SocketServer.UDPServer.__init__(self, *args, **kwargs)
 
+    def _generate_counts(self):
+        for label, points in self._count_data.iteritems():
+            value = 0.0
+            for count, tstamp in points:
+                value += float(count)
+            now = int(time.time())
+            yield '%(label)s %(value)s %(now)s' % locals()
+
+    def _generate_timings(self):
+        for label, points in self._timing_data.iteritems():
+            total = 0.0
+            count = 0.0
+            for delta, tstamp in points:
+                count += 1.0
+                total += delta
+            now = int(time.time())
+            average = (total / count)
+            yield '%(label)s %(average)s %(now)s' % locals()
+
+    def _clear_data(self):
+        for d in (self._count_data, self._timing_data):
+            for key in d.keys():
+                del d[key]
+
     def aggregate_flush(self):
         try:
-            if not self._stats_data:
+            if not self._count_data and not self._timing_data:
                 return
 
-            events = []
+            counts = '\n'.join(self._generate_counts()) + '\n'
+            timings = '\n'.join(self._generate_timings()) + '\n'
 
-            for label, points in self._stats_data.iteritems():
-                value = 0.0
-                for count, tstamp in points:
-                    value += float(count)
-                now = int(time.time())
-                events.append('%(label)s %(value)s %(now)s' % locals())
-
-            for key in self._stats_data.keys():
-                del self._stats_data[key]
-
-            message = '\n'.join(events) + '\n'
             if self.debug:
-                print 'writing:'
-                print repr(message)
+                if self._count_data:
+                    print 'writing counts:'
+                    print repr(counts)
+                if self._timing_data:
+                    print 'writing timings:'
+                    print repr(timings)
+
             csock = socket.socket()
             csock.connect((CARBON_SERVER, CARBON_PORT,))
             try:
-                csock.sendall(message)
+                csock.sendall(counts)
+                csock.sendall(timings)
             finally:
                 csock.close()
+                self._clear_data()
         finally:
             eventlet.spawn_after(AGGREGATE_TIMEOUT, self.aggregate_flush)
 
@@ -84,14 +106,22 @@ class StatsHandler(SocketServer.DatagramRequestHandler):
         if not len(chunks) == 3:
             return
 
-        label, value, tstamp = chunks[0], float(chunks[1]), float(chunks[2])
+        label, value, tstamp = chunks[0], chunks[1], float(chunks[2])
 
         if self.server.debug:
             print '<<handle>> %s %s %s' % (label, value, tstamp)
 
-        stats = self.server._stats_data
+        stats = self.server._count_data
+        # values of "1235|s" are to be consider *timings* instead of counts
+        if value[-2:] == '|s':
+            stats = self.server._timing_data
+            value = value[:-2]
+
+        value = float(value)
+
         if not stats.has_key(label):
             stats[label] = []
+
         stats[label].append((value, tstamp))
 
 class DebugStatsServer(StatsServer):
