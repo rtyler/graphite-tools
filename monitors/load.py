@@ -2,7 +2,6 @@
 
 import optparse
 import os
-import platform
 import sys
 import time
 

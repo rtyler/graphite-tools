@@ -44,7 +44,6 @@ def main():
         value = value[:-3]
         print '%(prefix)ssystem.meminfo.%(label)s %(value)s %(now)s' % locals()
 
-
     return 0
 
 if __name__ == '__main__':
