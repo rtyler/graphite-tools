@@ -14,12 +14,16 @@ def main():
                         help='Define the host where Carbon is running')
     options.add_option('--prefix', dest='prefix',
                         help='Prefix to pass along to all monitors (to prefix the label in Graphite)')
+    options.add_option('--suffix', dest='suffix',
+                        help='Suffix for all monitors, useful for identifying the machine')
 
     opts, args = options.parse_args()
 
     args = []
     if opts.prefix:
         args = ['-p', opts.prefix]
+    if opts.suffix:
+        args = args + ['-s', opts.suffix]
 
     messages = []
     for f in glob.iglob('monitors/*'):
