@@ -26,7 +26,7 @@ def main():
         args = args + ['-s', opts.suffix]
 
     messages = []
-    for f in glob.iglob('monitors/*'):
+    for f in glob.iglob('monitors/auto/*'):
         p = subprocess.Popen([sys.executable, f] + args, stdout=subprocess.PIPE)
         out, err = p.communicate()
         messages.extend([r.strip() for r in out.split('\n') if r])
